@@ -5,9 +5,11 @@ import {
   AlertTriangle,
   Leaf,
   Package,
+  Pencil,
   Plus,
   Search,
   Sprout,
+  Trash2,
 } from "lucide-react";
 import {
   Table,
@@ -28,77 +30,15 @@ import {
   ComboboxItem,
   ComboboxList,
 } from "@/components/ui/combobox";
+import {
+  getPlantStatus,
+  type PlantRecord,
+  type PlantStatus,
+} from "@/types/plant";
 
-type PlantStatus = "Available" | "Low Stock" | "Out of Stock";
-
-type Plant = {
-  id: number;
-  name: string;
-  category: string;
-  price: number;
-  stock: number;
+type InventoryPlant = PlantRecord & {
   status: PlantStatus;
 };
-
-const plants: Plant[] = [
-  {
-    id: 1,
-    name: "Aloe Vera",
-    category: "Succulent",
-    price: 10,
-    stock: 20,
-    status: "Available",
-  },
-  {
-    id: 2,
-    name: "Monstera Deliciosa",
-    category: "Tropical",
-    price: 45,
-    stock: 8,
-    status: "Available",
-  },
-  {
-    id: 3,
-    name: "Snake Plant",
-    category: "Indoor",
-    price: 18,
-    stock: 3,
-    status: "Low Stock",
-  },
-  {
-    id: 4,
-    name: "Fiddle Leaf Fig",
-    category: "Indoor",
-    price: 55,
-    stock: 0,
-    status: "Out of Stock",
-  },
-  {
-    id: 5,
-    name: "Basil",
-    category: "Herb",
-    price: 6,
-    stock: 32,
-    status: "Available",
-  },
-  {
-    id: 6,
-    name: "Peace Lily",
-    category: "Flowering",
-    price: 22,
-    stock: 5,
-    status: "Low Stock",
-  },
-];
-
-const categories = [
-  "All categories",
-  "Succulent",
-  "Tropical",
-  "Indoor",
-  "Herb",
-  "Flowering",
-];
 
 function statusVariant(status: PlantStatus) {
   if (status === "Available") return "secondary";
@@ -106,12 +46,29 @@ function statusVariant(status: PlantStatus) {
   return "destructive";
 }
 
-function InventoryTable() {
+function InventoryTable({ plants }: { plants: PlantRecord[] }) {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All categories");
 
+  const inventoryPlants: InventoryPlant[] = useMemo(
+    () =>
+      plants.map((plant) => ({
+        ...plant,
+        status: getPlantStatus(plant.stock),
+      })),
+    [plants]
+  );
+
+  const categories = useMemo(
+    () => [
+      "All categories",
+      ...Array.from(new Set(plants.map((plant) => plant.category))).sort(),
+    ],
+    [plants]
+  );
+
   const filteredPlants = useMemo(() => {
-    return plants.filter((plant) => {
+    return inventoryPlants.filter((plant) => {
       const matchesSearch = plant.name
         .toLowerCase()
         .includes(search.toLowerCase());
@@ -119,14 +76,20 @@ function InventoryTable() {
         category === "All categories" || plant.category === category;
       return matchesSearch && matchesCategory;
     });
-  }, [search, category]);
+  }, [inventoryPlants, search, category]);
 
-  const totalStock = plants.reduce((sum, plant) => sum + plant.stock, 0);
-  const availableCount = plants.filter(
+  const totalStock = inventoryPlants.reduce(
+    (sum, plant) => sum + plant.stock,
+    0
+  );
+  const availableCount = inventoryPlants.filter(
     (plant) => plant.status === "Available"
   ).length;
-  const lowStockCount = plants.filter(
+  const lowStockCount = inventoryPlants.filter(
     (plant) => plant.status === "Low Stock"
+  ).length;
+  const outOfStockCount = inventoryPlants.filter(
+    (plant) => plant.status === "Out of Stock"
   ).length;
 
   return (
@@ -141,8 +104,7 @@ function InventoryTable() {
             Plant Inventory
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground sm:text-base">
-            Track stock levels, categories, and availability across your
-            nursery.
+            Live inventory from your Neon Postgres database.
           </p>
         </div>
         <Button className="w-full sm:w-auto">
@@ -157,7 +119,7 @@ function InventoryTable() {
             <p className="text-sm text-muted-foreground">Total Plants</p>
             <Leaf className="size-4 text-muted-foreground" />
           </div>
-          <p className="mt-2 text-2xl font-semibold">{plants.length}</p>
+          <p className="mt-2 text-2xl font-semibold">{inventoryPlants.length}</p>
         </div>
         <div className="rounded-xl border bg-card p-4">
           <div className="flex items-center justify-between">
@@ -172,7 +134,7 @@ function InventoryTable() {
             <AlertTriangle className="size-4 text-muted-foreground" />
           </div>
           <p className="mt-2 text-2xl font-semibold">
-            {lowStockCount + plants.filter((p) => p.status === "Out of Stock").length}
+            {lowStockCount + outOfStockCount}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             {availableCount} available right now
@@ -220,6 +182,7 @@ function InventoryTable() {
               <TableHead>Price</TableHead>
               <TableHead>Stock</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
               <TableHead className="pr-4 text-right">Value</TableHead>
             </TableRow>
           </TableHeader>
@@ -227,10 +190,12 @@ function InventoryTable() {
             {filteredPlants.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={7}
                   className="h-32 text-center text-muted-foreground"
                 >
-                  No plants match your search.
+                  {inventoryPlants.length === 0
+                    ? "No plants in your inventory yet."
+                    : "No plants match your search."}
                 </TableCell>
               </TableRow>
             ) : (
@@ -241,7 +206,14 @@ function InventoryTable() {
                       <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
                         <Leaf className="size-4" />
                       </div>
-                      <span>{plant.name}</span>
+                      <div>
+                        <p>{plant.name}</p>
+                        {plant.description && (
+                          <p className="text-xs text-muted-foreground">
+                            {plant.description}
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </TableCell>
                   <TableCell>
@@ -266,6 +238,20 @@ function InventoryTable() {
                       {plant.status}
                     </Badge>
                   </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-1">
+                      <Button variant="ghost" size="icon-sm" aria-label="Edit plant">
+                        <Pencil />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="Delete plant"
+                      >
+                        <Trash2 />
+                      </Button>
+                    </div>
+                  </TableCell>
                   <TableCell className="pr-4 text-right font-medium">
                     ${(plant.price * plant.stock).toFixed(2)}
                   </TableCell>
@@ -276,7 +262,7 @@ function InventoryTable() {
         </Table>
 
         <div className="border-t px-4 py-3 text-sm text-muted-foreground">
-          Showing {filteredPlants.length} of {plants.length} plants
+          Showing {filteredPlants.length} of {inventoryPlants.length} plants
         </div>
       </div>
     </div>
